@@ -6,12 +6,14 @@ from app.api.schemas import (
     KeywordCreate,
     KeywordRead,
     KeywordUpdate,
+    NewsItemCreate,
+    NewsItemRead,
     SourceCreate,
     SourceRead,
     SourceUpdate,
 )
 from app.database import get_db
-from app.models import Keyword, Source
+from app.models import Keyword, NewsItem, Source
 
 router = APIRouter(prefix="/api")
 
@@ -112,4 +114,23 @@ async def delete_keyword(keyword_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return {"message": "Keyword deleted"}
+
+@router.post("/news/", response_model=NewsItemRead)
+async def create_news_item(
+    news_data: NewsItemCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    news_item = NewsItem(**news_data.model_dump())
+
+    db.add(news_item)
+    await db.commit()
+    await db.refresh(news_item)
+
+    return news_item
+
+
+@router.get("/news/", response_model=list[NewsItemRead])
+async def get_news_items(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(NewsItem))
+    return result.scalars().all()
 
