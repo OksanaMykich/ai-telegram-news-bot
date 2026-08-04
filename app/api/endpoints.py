@@ -8,12 +8,14 @@ from app.api.schemas import (
     KeywordUpdate,
     NewsItemCreate,
     NewsItemRead,
+    PostCreate,
+    PostRead,
     SourceCreate,
     SourceRead,
     SourceUpdate,
 )
 from app.database import get_db
-from app.models import Keyword, NewsItem, Source
+from app.models import Keyword, NewsItem, Post, Source
 
 router = APIRouter(prefix="/api")
 
@@ -134,3 +136,21 @@ async def get_news_items(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(NewsItem))
     return result.scalars().all()
 
+@router.post("/posts/", response_model=PostRead)
+async def create_post(
+    post_data: PostCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    post = Post(**post_data.model_dump())
+
+    db.add(post)
+    await db.commit()
+    await db.refresh(post)
+
+    return post
+
+
+@router.get("/posts/", response_model=list[PostRead])
+async def get_posts(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Post))
+    return result.scalars().all()
