@@ -19,3 +19,21 @@ class SourceRead(SourceBase):
 
     class Config:
         from_attributes = True
+
+class KeywordBase(BaseModel):
+    word: str
+
+
+class KeywordCreate(KeywordBase):
+    pass
+
+
+class KeywordUpdate(KeywordBase):
+    pass
+
+
+class KeywordRead(KeywordBase):
+    id: int
+
+    class Config:
+        from_attributes = True
