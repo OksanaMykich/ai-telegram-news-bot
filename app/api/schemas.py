@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -33,6 +35,25 @@ class KeywordUpdate(KeywordBase):
 
 
 class KeywordRead(KeywordBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+class NewsItemBase(BaseModel):
+    title: str
+    url: str | None = None
+    summary: str
+    source: str
+    published_at: datetime
+    raw_text: str | None = None
+
+
+class NewsItemCreate(NewsItemBase):
+    pass
+
+
+class NewsItemRead(NewsItemBase):
     id: int
 
     class Config:
