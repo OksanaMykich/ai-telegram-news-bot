@@ -11,6 +11,8 @@ class SourceBase(BaseModel):
 class SourceCreate(SourceBase):
     pass
 
+class SourceUpdate(SourceBase):
+    pass
 
 class SourceRead(SourceBase):
     id: int
