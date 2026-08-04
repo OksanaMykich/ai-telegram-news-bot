@@ -58,3 +58,20 @@ class NewsItemRead(NewsItemBase):
 
     class Config:
         from_attributes = True
+
+class PostBase(BaseModel):
+    news_id: int
+    generated_text: str
+    published_at: datetime | None = None
+    status: str = "new"
+
+
+class PostCreate(PostBase):
+    pass
+
+
+class PostRead(PostBase):
+    id: int
+
+    class Config:
+        from_attributes = True
