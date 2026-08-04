@@ -32,3 +32,11 @@ class NewsItem(Base):
     published_at: Mapped[datetime] = mapped_column(DateTime)
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    news_id: Mapped[int] = mapped_column(index=True)
+    generated_text: Mapped[str] = mapped_column(Text)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="new")
