@@ -7,6 +7,7 @@ from app.api.schemas import PostCreate, PostRead
 from app.database import get_db
 from app.models import Post
 from app.telegram.publisher import send_telegram_message
+from app.tasks import publish_post_to_telegram_task
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -49,3 +50,12 @@ async def publish_post(post_id: int, db: AsyncSession = Depends(get_db)):
     await db.refresh(post)
 
     return post
+
+@router.post("/{post_id}/publish-task")
+async def publish_post_task(post_id: int):
+    task = publish_post_to_telegram_task.delay(post_id)
+
+    return {
+        "task_id": task.id,
+        "status": "queued",
+    }
