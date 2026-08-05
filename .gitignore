@@ -6,3 +6,5 @@ __pycache__/
 .idea/
 .vscode/
 celerybeat-schedule*
+*.session
+*.session-journal
