@@ -6,6 +6,7 @@ from app.ai.generator import generate_post_text
 from app.api.schemas import GeneratePostRequest, PostRead
 from app.database import get_db
 from app.models import NewsItem, Post
+from app.tasks import generate_post_for_news_task
 
 router = APIRouter(prefix="/generate", tags=["generate"])
 
@@ -57,3 +58,12 @@ async def generate_post(
     await db.refresh(post)
 
     return post
+
+@router.post("/task")
+async def generate_post_task(request_data: GeneratePostRequest):
+    task = generate_post_for_news_task.delay(request_data.news_id)
+
+    return {
+        "task_id": task.id,
+        "status": "queued",
+    }
