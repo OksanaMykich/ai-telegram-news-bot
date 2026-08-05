@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from telethon import TelegramClient
 
@@ -23,7 +23,7 @@ async def parse_telegram_channel(channel_username: str, limit: int = 10) -> list
                     "url": None,
                     "summary": message.text[:500],
                     "source": channel_username,
-                    "published_at": message.date or datetime.utcnow(),
+                    "published_at": (message.date or datetime.now(UTC)).replace(tzinfo=None),
                     "raw_text": message.text,
                 }
             )
