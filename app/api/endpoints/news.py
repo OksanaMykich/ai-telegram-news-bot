@@ -8,6 +8,10 @@ from app.models import Keyword, NewsItem
 from app.news_parser.sites import parse_rss_feed
 from app.utils import is_news_relevant
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/news", tags=["news"])
 
 
@@ -35,6 +39,12 @@ async def parse_rss_news(
     request_data: RSSParseRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(
+        "Starting RSS parsing for source=%s feed_url=%s",
+        request_data.source_name,
+        request_data.feed_url,
+    )
+
     parsed_items = parse_rss_feed(
         source_name=request_data.source_name,
         feed_url=request_data.feed_url,
@@ -68,6 +78,13 @@ async def parse_rss_news(
         added_count += 1
 
     await db.commit()
+
+    logger.info(
+        "Finished RSS parsing: parsed=%s filtered=%s added=%s",
+        len(parsed_items),
+        filtered_count,
+        added_count,
+    )
 
     return {
         "parsed_count": len(parsed_items),
