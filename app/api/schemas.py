@@ -82,3 +82,7 @@ class RSSParseRequest(BaseModel):
 
 class GeneratePostRequest(BaseModel):
     news_id: int
+
+class TelegramParseRequest(BaseModel):
+    channel_username: str
+    limit: int = 10

@@ -1,9 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.tasks import parse_rss_source_task
+from app.tasks import parse_rss_source_task, parse_telegram_source_task
 
-from app.api.schemas import NewsItemCreate, NewsItemRead, RSSParseRequest
+from app.api.schemas import (
+    NewsItemCreate,
+    NewsItemRead,
+    RSSParseRequest,
+    TelegramParseRequest,
+)
 from app.database import get_db
 from app.models import Keyword, NewsItem
 from app.news_parser.sites import parse_rss_feed
@@ -98,6 +103,18 @@ async def parse_rss_news_task(request_data: RSSParseRequest):
     task = parse_rss_source_task.delay(
         request_data.source_name,
         request_data.feed_url,
+    )
+
+    return {
+        "task_id": task.id,
+        "status": "queued",
+    }
+
+@router.post("/parse-telegram-task")
+async def parse_telegram_news_task(request_data: TelegramParseRequest):
+    task = parse_telegram_source_task.delay(
+        request_data.channel_username,
+        request_data.limit,
     )
 
     return {
