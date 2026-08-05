@@ -75,3 +75,7 @@ class PostRead(PostBase):
 
     class Config:
         from_attributes = True
+
+class RSSParseRequest(BaseModel):
+    source_name: str
+    feed_url: str
