@@ -24,6 +24,7 @@ A FastAPI service for collecting news from websites and Telegram channels, filte
 - Celery task for AI post generation
 - Celery task for Telegram post publishing
 - API endpoints for background AI generation and publishing
+- Basic logging for API actions and Celery tasks
 
 
 ## Tech Stack
@@ -229,11 +230,5 @@ POST   /api/posts/{post_id}/publish-task
 - On Windows, Celery worker is started with `--pool=solo`.
 - `TELEGRAM_TARGET_CHANNEL` must point to a Telegram channel where your account has admin permissions.
 - Background AI generation and Telegram publishing require the Celery worker to be running.
+- Celery tasks log parsing, generation, publishing, and handled external API errors.
 
-## Next Steps
-
-- Improve duplicate detection for Telegram messages
-- Load scheduled RSS and Telegram sources from the `sources` table
-- Add full automatic pipeline: parse, filter, generate, and publish
-- Add more detailed logging for all background tasks
-- Add tests for API endpoints and background tasks
