@@ -1,13 +1,15 @@
 import asyncio
 
 from sqlalchemy import select
+from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 
 from app.database import AsyncSessionLocal, engine
-from app.models import Keyword, NewsItem
+from app.models import Keyword, NewsItem, Post
 from app.news_parser.sites import parse_rss_feed
 from app.utils import is_news_relevant
 from celery_worker import celery_app
 from app.news_parser.telegram import parse_telegram_channel
+from app.ai.generator import generate_post_text
 
 
 @celery_app.task
@@ -110,3 +112,63 @@ async def parse_telegram_source(channel_username: str, limit: int = 10) -> dict:
 @celery_app.task
 def parse_telegram_source_task(channel_username: str, limit: int = 10) -> dict:
     return asyncio.run(parse_telegram_source(channel_username, limit))
+
+async def generate_post_for_news(news_id: int) -> dict:
+    try:
+        async with AsyncSessionLocal() as db:
+            news_item = await db.get(NewsItem, news_id)
+
+            if news_item is None:
+                return {
+                    "status": "failed",
+                    "error": "News item not found",
+                }
+
+            try:
+                generated_text = await generate_post_text(
+                    title=news_item.title,
+                    summary=news_item.summary,
+                )
+            except AuthenticationError:
+                return {
+                    "status": "failed",
+                    "error": "OpenAI authentication failed",
+                }
+            except RateLimitError:
+                return {
+                    "status": "failed",
+                    "error": "OpenAI quota exceeded or rate limit reached",
+                }
+            except APIConnectionError:
+                return {
+                    "status": "failed",
+                    "error": "OpenAI service is unavailable",
+                }
+            except APIError:
+                return {
+                    "status": "failed",
+                    "error": "OpenAI API returned an error",
+                }
+
+            post = Post(
+                news_id=news_item.id,
+                generated_text=generated_text,
+                status="generated",
+            )
+
+            db.add(post)
+            await db.commit()
+            await db.refresh(post)
+
+            return {
+                "status": "generated",
+                "post_id": post.id,
+                "news_id": news_item.id,
+            }
+    finally:
+        await engine.dispose()
+
+
+@celery_app.task
+def generate_post_for_news_task(news_id: int) -> dict:
+    return asyncio.run(generate_post_for_news(news_id))
