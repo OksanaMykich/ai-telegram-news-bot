@@ -16,10 +16,15 @@ A FastAPI service for collecting news from websites and Telegram channels, filte
 - Manual AI post generation with OpenAI API
 - OpenAI error handling
 - Telegram post publishing with Telethon
+- Telegram channel publishing support
 - Redis + Celery worker
 - Celery Beat scheduled RSS parsing
 - Celery tasks for RSS and Telegram parsing
 - Basic logging for RSS parsing
+- Celery task for AI post generation
+- Celery task for Telegram post publishing
+- API endpoints for background AI generation and publishing
+
 
 ## Tech Stack
 
@@ -181,10 +186,12 @@ POST   /api/news/parse-rss-task
 POST   /api/news/parse-telegram-task
 
 POST   /api/generate/
+POST   /api/generate/task
 
 POST   /api/posts/
 GET    /api/posts/
 POST   /api/posts/{post_id}/publish
+POST   /api/posts/{post_id}/publish-task
 ```
 
 ## Example RSS Parsing Request
@@ -221,11 +228,12 @@ POST   /api/posts/{post_id}/publish
 - Celery Beat is configured to run RSS parsing every 30 minutes.
 - On Windows, Celery worker is started with `--pool=solo`.
 - `TELEGRAM_TARGET_CHANNEL` must point to a Telegram channel where your account has admin permissions.
+- Background AI generation and Telegram publishing require the Celery worker to be running.
 
 ## Next Steps
 
 - Improve duplicate detection for Telegram messages
-- Load scheduled RSS sources from the `sources` table
-- Add automatic post generation pipeline
-- Add automatic Telegram publishing pipeline
+- Load scheduled RSS and Telegram sources from the `sources` table
+- Add full automatic pipeline: parse, filter, generate, and publish
 - Add more detailed logging for all background tasks
+- Add tests for API endpoints and background tasks
