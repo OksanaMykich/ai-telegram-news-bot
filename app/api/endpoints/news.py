@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.tasks import parse_rss_source_task
 
 from app.api.schemas import NewsItemCreate, NewsItemRead, RSSParseRequest
 from app.database import get_db
@@ -90,4 +91,16 @@ async def parse_rss_news(
         "parsed_count": len(parsed_items),
         "filtered_count": filtered_count,
         "added_count": added_count,
+    }
+
+@router.post("/parse-rss-task")
+async def parse_rss_news_task(request_data: RSSParseRequest):
+    task = parse_rss_source_task.delay(
+        request_data.source_name,
+        request_data.feed_url,
+    )
+
+    return {
+        "task_id": task.id,
+        "status": "queued",
     }
