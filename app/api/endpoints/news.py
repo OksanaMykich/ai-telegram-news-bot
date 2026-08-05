@@ -4,8 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import NewsItemCreate, NewsItemRead, RSSParseRequest
 from app.database import get_db
-from app.models import NewsItem
+from app.models import Keyword, NewsItem
 from app.news_parser.sites import parse_rss_feed
+from app.utils import is_news_relevant
 
 router = APIRouter(prefix="/news", tags=["news"])
 
@@ -39,9 +40,18 @@ async def parse_rss_news(
         feed_url=request_data.feed_url,
     )
 
+    keywords_result = await db.execute(select(Keyword.word))
+    keywords = list(keywords_result.scalars().all())
+
+    filtered_count = 0
+
     added_count = 0
 
     for item in parsed_items:
+        if not is_news_relevant(item, keywords):
+            continue
+
+        filtered_count += 1
         existing_item = None
 
         if item["url"]:
@@ -61,5 +71,6 @@ async def parse_rss_news(
 
     return {
         "parsed_count": len(parsed_items),
+        "filtered_count": filtered_count,
         "added_count": added_count,
     }
