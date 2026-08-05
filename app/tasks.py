@@ -1,17 +1,21 @@
 import asyncio
-
-from sqlalchemy import select
+import logging
 from datetime import UTC, datetime
-from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 
+from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
+from sqlalchemy import select
+
+from app.ai.generator import generate_post_text
 from app.database import AsyncSessionLocal, engine
 from app.models import Keyword, NewsItem, Post
 from app.news_parser.sites import parse_rss_feed
+from app.news_parser.telegram import parse_telegram_channel
+from app.telegram.publisher import send_telegram_message
 from app.utils import is_news_relevant
 from celery_worker import celery_app
-from app.news_parser.telegram import parse_telegram_channel
-from app.ai.generator import generate_post_text
-from app.telegram.publisher import send_telegram_message
+
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task
@@ -21,6 +25,8 @@ def test_task(name: str) -> str:
 
 async def parse_rss_source(source_name: str, feed_url: str) -> dict:
     try:
+        logger.info("Starting RSS parsing task: source=%s", source_name)
+
         parsed_items = parse_rss_feed(source_name=source_name, feed_url=feed_url)
 
         async with AsyncSessionLocal() as db:
@@ -52,6 +58,13 @@ async def parse_rss_source(source_name: str, feed_url: str) -> dict:
 
             await db.commit()
 
+        logger.info(
+            "Finished RSS parsing task: parsed=%s filtered=%s added=%s",
+            len(parsed_items),
+            filtered_count,
+            added_count,
+        )
+
         return {
             "parsed_count": len(parsed_items),
             "filtered_count": filtered_count,
@@ -65,8 +78,15 @@ async def parse_rss_source(source_name: str, feed_url: str) -> dict:
 def parse_rss_source_task(source_name: str, feed_url: str) -> dict:
     return asyncio.run(parse_rss_source(source_name, feed_url))
 
+
 async def parse_telegram_source(channel_username: str, limit: int = 10) -> dict:
     try:
+        logger.info(
+            "Starting Telegram parsing task: channel=%s limit=%s",
+            channel_username,
+            limit,
+        )
+
         parsed_items = await parse_telegram_channel(
             channel_username=channel_username,
             limit=limit,
@@ -102,6 +122,13 @@ async def parse_telegram_source(channel_username: str, limit: int = 10) -> dict:
 
             await db.commit()
 
+        logger.info(
+            "Finished Telegram parsing task: parsed=%s filtered=%s added=%s",
+            len(parsed_items),
+            filtered_count,
+            added_count,
+        )
+
         return {
             "parsed_count": len(parsed_items),
             "filtered_count": filtered_count,
@@ -115,12 +142,16 @@ async def parse_telegram_source(channel_username: str, limit: int = 10) -> dict:
 def parse_telegram_source_task(channel_username: str, limit: int = 10) -> dict:
     return asyncio.run(parse_telegram_source(channel_username, limit))
 
+
 async def generate_post_for_news(news_id: int) -> dict:
     try:
+        logger.info("Starting AI generation task: news_id=%s", news_id)
+
         async with AsyncSessionLocal() as db:
             news_item = await db.get(NewsItem, news_id)
 
             if news_item is None:
+                logger.warning("News item not found for AI generation: news_id=%s", news_id)
                 return {
                     "status": "failed",
                     "error": "News item not found",
@@ -132,21 +163,28 @@ async def generate_post_for_news(news_id: int) -> dict:
                     summary=news_item.summary,
                 )
             except AuthenticationError:
+                logger.warning("OpenAI authentication failed: news_id=%s", news_id)
                 return {
                     "status": "failed",
                     "error": "OpenAI authentication failed",
                 }
             except RateLimitError:
+                logger.warning(
+                    "OpenAI quota exceeded while generating post: news_id=%s",
+                    news_id,
+                )
                 return {
                     "status": "failed",
                     "error": "OpenAI quota exceeded or rate limit reached",
                 }
             except APIConnectionError:
+                logger.warning("OpenAI service unavailable: news_id=%s", news_id)
                 return {
                     "status": "failed",
                     "error": "OpenAI service is unavailable",
                 }
             except APIError:
+                logger.warning("OpenAI API returned an error: news_id=%s", news_id)
                 return {
                     "status": "failed",
                     "error": "OpenAI API returned an error",
@@ -162,6 +200,12 @@ async def generate_post_for_news(news_id: int) -> dict:
             await db.commit()
             await db.refresh(post)
 
+            logger.info(
+                "Finished AI generation task: news_id=%s post_id=%s",
+                news_item.id,
+                post.id,
+            )
+
             return {
                 "status": "generated",
                 "post_id": post.id,
@@ -175,18 +219,23 @@ async def generate_post_for_news(news_id: int) -> dict:
 def generate_post_for_news_task(news_id: int) -> dict:
     return asyncio.run(generate_post_for_news(news_id))
 
+
 async def publish_post_to_telegram(post_id: int) -> dict:
     try:
+        logger.info("Starting Telegram publishing task: post_id=%s", post_id)
+
         async with AsyncSessionLocal() as db:
             post = await db.get(Post, post_id)
 
             if post is None:
+                logger.warning("Post not found for Telegram publishing: post_id=%s", post_id)
                 return {
                     "status": "failed",
                     "error": "Post not found",
                 }
 
             if post.status == "published":
+                logger.info("Post already published, skipping: post_id=%s", post.id)
                 return {
                     "status": "skipped",
                     "error": "Post already published",
@@ -200,6 +249,8 @@ async def publish_post_to_telegram(post_id: int) -> dict:
 
             await db.commit()
             await db.refresh(post)
+
+            logger.info("Finished Telegram publishing task: post_id=%s", post.id)
 
             return {
                 "status": "published",
