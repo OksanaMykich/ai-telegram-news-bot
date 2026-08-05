@@ -85,7 +85,7 @@ OPENAI_MODEL=gpt-4o-mini
 TELEGRAM_API_ID=your_telegram_api_id_here
 TELEGRAM_API_HASH=your_telegram_api_hash_here
 TELEGRAM_SESSION_NAME=aibot_session
-TELEGRAM_TARGET_CHANNEL=me
+TELEGRAM_TARGET_CHANNEL=@your_channel_username
 ```
 
 ## Installation
@@ -220,6 +220,7 @@ POST   /api/posts/{post_id}/publish
 - OpenAI API generation requires a valid API key and active API credits.
 - Celery Beat is configured to run RSS parsing every 30 minutes.
 - On Windows, Celery worker is started with `--pool=solo`.
+- `TELEGRAM_TARGET_CHANNEL` must point to a Telegram channel where your account has admin permissions.
 
 ## Next Steps
 
