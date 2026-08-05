@@ -79,3 +79,6 @@ class PostRead(PostBase):
 class RSSParseRequest(BaseModel):
     source_name: str
     feed_url: str
+
+class GeneratePostRequest(BaseModel):
+    news_id: int
