@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.generator import generate_post_text
@@ -19,10 +20,31 @@ async def generate_post(
     if news_item is None:
         raise HTTPException(status_code=404, detail="News item not found")
 
-    generated_text = generate_post_text(
-        title=news_item.title,
-        summary=news_item.summary,
-    )
+    try:
+        generated_text = await generate_post_text(
+            title=news_item.title,
+            summary=news_item.summary,
+        )
+    except AuthenticationError:
+        raise HTTPException(
+            status_code=401,
+            detail="OpenAI authentication failed. Check your API key.",
+        )
+    except RateLimitError:
+        raise HTTPException(
+            status_code=503,
+            detail="OpenAI quota exceeded or rate limit reached.",
+        )
+    except APIConnectionError:
+        raise HTTPException(
+            status_code=503,
+            detail="OpenAI service is unavailable. Try again later.",
+        )
+    except APIError:
+        raise HTTPException(
+            status_code=502,
+            detail="OpenAI API returned an error.",
+        )
 
     post = Post(
         news_id=news_item.id,
