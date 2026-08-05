@@ -1,6 +1,7 @@
 import asyncio
 
 from sqlalchemy import select
+from datetime import UTC, datetime
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 
 from app.database import AsyncSessionLocal, engine
@@ -10,6 +11,7 @@ from app.utils import is_news_relevant
 from celery_worker import celery_app
 from app.news_parser.telegram import parse_telegram_channel
 from app.ai.generator import generate_post_text
+from app.telegram.publisher import send_telegram_message
 
 
 @celery_app.task
@@ -172,3 +174,41 @@ async def generate_post_for_news(news_id: int) -> dict:
 @celery_app.task
 def generate_post_for_news_task(news_id: int) -> dict:
     return asyncio.run(generate_post_for_news(news_id))
+
+async def publish_post_to_telegram(post_id: int) -> dict:
+    try:
+        async with AsyncSessionLocal() as db:
+            post = await db.get(Post, post_id)
+
+            if post is None:
+                return {
+                    "status": "failed",
+                    "error": "Post not found",
+                }
+
+            if post.status == "published":
+                return {
+                    "status": "skipped",
+                    "error": "Post already published",
+                    "post_id": post.id,
+                }
+
+            await send_telegram_message(post.generated_text)
+
+            post.status = "published"
+            post.published_at = datetime.now(UTC).replace(tzinfo=None)
+
+            await db.commit()
+            await db.refresh(post)
+
+            return {
+                "status": "published",
+                "post_id": post.id,
+            }
+    finally:
+        await engine.dispose()
+
+
+@celery_app.task
+def publish_post_to_telegram_task(post_id: int) -> dict:
+    return asyncio.run(publish_post_to_telegram(post_id))
