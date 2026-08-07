@@ -338,3 +338,62 @@ async def publish_post_to_telegram(post_id: int) -> dict:
 @celery_app.task
 def publish_post_to_telegram_task(post_id: int) -> dict:
     return asyncio.run(publish_post_to_telegram(post_id))
+
+async def generate_posts_for_unprocessed_news(limit: int = 5):
+    logger.info("Starting bulk AI generation task: limit=%s", limit)
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(NewsItem.id)
+            .outerjoin(Post, Post.news_id == NewsItem.id)
+            .where(Post.id.is_(None))
+            .order_by(NewsItem.published_at.desc())
+            .limit(limit)
+        )
+
+        news_ids = result.scalars().all()
+
+    generated_count = 0
+    failed_count = 0
+    skipped_count = 0
+    results = []
+
+    for news_id in news_ids:
+        task_result = await generate_post_for_news(news_id)
+        results.append(
+            {
+                "news_id": news_id,
+                "result": task_result,
+            }
+        )
+
+        status = task_result.get("status")
+
+        if status == "generated":
+            generated_count += 1
+        elif status == "failed":
+            failed_count += 1
+        else:
+            skipped_count += 1
+
+    logger.info(
+        "Finished bulk AI generation task: found=%s generated=%s failed=%s skipped=%s",
+        len(news_ids),
+        generated_count,
+        failed_count,
+        skipped_count,
+    )
+
+    return {
+        "status": "completed",
+        "found_count": len(news_ids),
+        "generated_count": generated_count,
+        "failed_count": failed_count,
+        "skipped_count": skipped_count,
+        "results": results,
+    }
+
+
+@celery_app.task
+def generate_posts_for_unprocessed_news_task(limit: int = 5):
+    return asyncio.run(generate_posts_for_unprocessed_news(limit))
