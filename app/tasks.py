@@ -397,3 +397,62 @@ async def generate_posts_for_unprocessed_news(limit: int = 5):
 @celery_app.task
 def generate_posts_for_unprocessed_news_task(limit: int = 5):
     return asyncio.run(generate_posts_for_unprocessed_news(limit))
+
+async def publish_generated_posts(limit: int = 5):
+    logger.info("Starting bulk Telegram publishing task: limit=%s", limit)
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Post.id)
+            .where(Post.status == "generated")
+            .where(Post.published_at.is_(None))
+            .order_by(Post.id.asc())
+            .limit(limit)
+        )
+
+        post_ids = result.scalars().all()
+
+    published_count = 0
+    failed_count = 0
+    skipped_count = 0
+    results = []
+
+    for post_id in post_ids:
+        task_result = await publish_post_to_telegram(post_id)
+        results.append(
+            {
+                "post_id": post_id,
+                "result": task_result,
+            }
+        )
+
+        status = task_result.get("status")
+
+        if status == "published":
+            published_count += 1
+        elif status == "failed":
+            failed_count += 1
+        else:
+            skipped_count += 1
+
+    logger.info(
+        "Finished bulk Telegram publishing task: found=%s published=%s failed=%s skipped=%s",
+        len(post_ids),
+        published_count,
+        failed_count,
+        skipped_count,
+    )
+
+    return {
+        "status": "completed",
+        "found_count": len(post_ids),
+        "published_count": published_count,
+        "failed_count": failed_count,
+        "skipped_count": skipped_count,
+        "results": results,
+    }
+
+
+@celery_app.task
+def publish_generated_posts_task(limit: int = 5):
+    return asyncio.run(publish_generated_posts(limit))
