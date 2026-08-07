@@ -1,31 +1,26 @@
 # AI Telegram News Bot
 
-A FastAPI service for collecting news from websites and Telegram channels, filtering relevant items, generating Telegram posts with AI, and publishing them to a Telegram channel.
+FastAPI service for collecting news from RSS feeds and public Telegram channels, filtering relevant items, generating AI-based Telegram posts, and publishing them to a Telegram channel on schedule.
 
-## Current Features
+## Features
 
 - FastAPI application with Swagger documentation
 - PostgreSQL database with Alembic migrations
-- Source CRUD API
-- Keyword CRUD API
-- News item API
-- Post history API
-- RSS news parser
-- Telegram channel parser
+- CRUD API for news sources
+- CRUD API for keywords
+- News item history API
+- Generated post history API
+- RSS news parsing
+- Public Telegram channel parsing with Telethon
 - Keyword-based news filtering
+- Duplicate protection for news and posts
 - Manual AI post generation with OpenAI API
 - OpenAI error handling
-- Telegram post publishing with Telethon
-- Telegram channel publishing support
-- Redis + Celery worker
-- Celery Beat scheduled RSS parsing
-- Celery tasks for RSS and Telegram parsing
-- Basic logging for RSS parsing
-- Celery task for AI post generation
-- Celery task for Telegram post publishing
-- API endpoints for background AI generation and publishing
-- Basic logging for API actions and Celery tasks
-
+- Telegram publishing with Telethon
+- Redis and Celery background tasks
+- Celery Beat scheduled full news pipeline
+- Full pipeline: parse enabled sources -> generate AI posts -> publish generated posts
+- Logging for API actions and Celery tasks
 
 ## Tech Stack
 
@@ -35,7 +30,6 @@ A FastAPI service for collecting news from websites and Telegram channels, filte
 - SQLAlchemy
 - Alembic
 - Pydantic
-- Uvicorn
 - Redis
 - Celery
 - Celery Beat
@@ -49,25 +43,22 @@ A FastAPI service for collecting news from websites and Telegram channels, filte
 ```text
 app/
 ├── ai/
-│   ├── __init__.py
 │   ├── generator.py
 │   └── openai_client.py
 ├── api/
 │   ├── endpoints/
-│   │   ├── __init__.py
 │   │   ├── generate.py
 │   │   ├── keywords.py
 │   │   ├── news.py
+│   │   ├── pipeline.py
 │   │   ├── posts.py
 │   │   └── sources.py
 │   ├── router.py
 │   └── schemas.py
 ├── news_parser/
-│   ├── __init__.py
 │   ├── sites.py
 │   └── telegram.py
 ├── telegram/
-│   ├── __init__.py
 │   └── publisher.py
 ├── config.py
 ├── database.py
@@ -80,14 +71,16 @@ app/
 
 ## Environment Variables
 
-Create a `.env` file based on `.env.example`:
+Create a `.env` file based on `.env.example`.
 
 ```env
 APP_NAME=AI Telegram News Bot
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/aibot
 REDIS_URL=redis://localhost:6379/0
+
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4o-mini
+
 TELEGRAM_API_ID=your_telegram_api_id_here
 TELEGRAM_API_HASH=your_telegram_api_hash_here
 TELEGRAM_SESSION_NAME=aibot_session
@@ -109,7 +102,7 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-## Database
+## Database Setup
 
 Create a PostgreSQL database named:
 
@@ -123,21 +116,29 @@ Run migrations:
 alembic upgrade head
 ```
 
-## Redis
+## Redis Setup
 
-Start Redis with Docker:
+Start Docker Desktop first.
+
+If the Redis container already exists:
 
 ```powershell
 docker start aibot-redis
 ```
 
-If the Redis container does not exist yet, create it:
+If the Redis container does not exist yet:
 
 ```powershell
 docker run --name aibot-redis -p 6379:6379 -d redis:7
 ```
 
-## Running the App
+Check that Redis is running:
+
+```powershell
+docker ps
+```
+
+## Running the Application
 
 Start FastAPI:
 
@@ -151,7 +152,7 @@ Open Swagger documentation:
 http://127.0.0.1:8000/docs
 ```
 
-## Background Services
+## Running Background Services
 
 Start Celery worker:
 
@@ -163,6 +164,12 @@ Start Celery Beat:
 
 ```powershell
 celery -A celery_worker.celery_app beat --loglevel=info
+```
+
+Celery Beat runs the full news pipeline every 30 minutes:
+
+```text
+parse enabled sources -> generate AI posts -> publish generated posts
 ```
 
 ## API Endpoints
@@ -188,47 +195,48 @@ POST   /api/news/parse-telegram-task
 
 POST   /api/generate/
 POST   /api/generate/task
+POST   /api/generate/task/bulk
 
 POST   /api/posts/
 GET    /api/posts/
 POST   /api/posts/{post_id}/publish
 POST   /api/posts/{post_id}/publish-task
+POST   /api/posts/publish-task/bulk
+
+POST   /api/pipeline/run
 ```
 
-## Example RSS Parsing Request
+## Example Source
+
+RSS source:
 
 ```json
 {
-  "source_name": "BBC News",
-  "feed_url": "https://feeds.bbci.co.uk/news/rss.xml"
+  "type": "site",
+  "name": "BBC News RSS",
+  "url": "https://feeds.bbci.co.uk/news/rss.xml",
+  "enabled": true
 }
 ```
 
-## Example Telegram Parsing Request
+Telegram source:
 
 ```json
 {
-  "channel_username": "durov",
-  "limit": 5
-}
-```
-
-## Example Manual Generation Request
-
-```json
-{
-  "news_id": 1
+  "type": "tg",
+  "name": "Durov",
+  "url": "durov",
+  "enabled": true
 }
 ```
 
 ## Notes
 
-- `.env` is ignored by Git and must not be committed.
-- Telethon creates `.session` files. They are ignored by Git.
-- OpenAI API generation requires a valid API key and active API credits.
-- Celery Beat is configured to run RSS parsing every 30 minutes.
-- On Windows, Celery worker is started with `--pool=solo`.
-- `TELEGRAM_TARGET_CHANNEL` must point to a Telegram channel where your account has admin permissions.
-- Background AI generation and Telegram publishing require the Celery worker to be running.
-- Celery tasks log parsing, generation, publishing, and handled external API errors.
-
+- `.env` must not be committed to Git.
+- Telethon creates `.session` files. They must not be committed.
+- OpenAI generation requires a valid API key and active API credits.
+- Celery Beat uses only sources where `enabled = true`.
+- RSS sources must use a direct RSS feed URL.
+- Telegram sources use public channel usernames.
+- On Windows, Celery worker should be started with `--pool=solo`.
+- `TELEGRAM_TARGET_CHANNEL` must be a Telegram channel where the account has admin permissions.
