@@ -7,14 +7,13 @@ from sqlalchemy import select
 
 from app.ai.generator import generate_post_text
 from app.database import AsyncSessionLocal, engine
+from app.error_logger import save_error_log
 from app.models import Keyword, NewsItem, Post, Source
 from app.news_parser.sites import parse_rss_feed
 from app.news_parser.telegram import parse_telegram_channel
 from app.telegram.publisher import send_telegram_message
 from app.utils import is_news_relevant
 from celery_worker import celery_app
-from app.error_logger import save_error_log
-
 
 logger = logging.getLogger(__name__)
 
@@ -144,12 +143,17 @@ def parse_telegram_source_task(channel_username: str, limit: int = 10) -> dict:
     return asyncio.run(parse_telegram_source(channel_username, limit))
 
 
-async def parse_enabled_sources() -> dict:
+async def parse_enabled_sources(language: str | None = None) -> dict:
     try:
-        logger.info("Starting enabled sources parsing task")
+        logger.info("Starting enabled sources parsing task: language=%s", language)
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Source).where(Source.enabled.is_(True)))
+            query = select(Source).where(Source.enabled.is_(True))
+
+            if language is not None:
+                query = query.where(Source.language == language)
+
+            result = await db.execute(query)
             sources = result.scalars().all()
 
             source_configs = [
@@ -226,14 +230,17 @@ async def parse_enabled_sources() -> dict:
 
         return {
             "status": "completed",
+            "language": language,
             "sources_count": len(results),
             "results": results,
         }
     finally:
         await engine.dispose()
+
+
 @celery_app.task
-def parse_enabled_sources_task() -> dict:
-    return asyncio.run(parse_enabled_sources())
+def parse_enabled_sources_task(language: str | None = None):
+    return asyncio.run(parse_enabled_sources(language))
 
 
 async def generate_post_for_news(news_id: int) -> dict:
@@ -313,6 +320,67 @@ def generate_post_for_news_task(news_id: int) -> dict:
     return asyncio.run(generate_post_for_news(news_id))
 
 
+async def generate_posts_for_unprocessed_news(limit: int = 5):
+    logger.info("Starting bulk AI generation task: limit=%s", limit)
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(NewsItem.id)
+            .outerjoin(Post, Post.news_id == NewsItem.id)
+            .where(Post.id.is_(None))
+            .order_by(NewsItem.published_at.desc())
+            .limit(limit)
+        )
+
+        news_ids = result.scalars().all()
+
+    generated_count = 0
+    failed_count = 0
+    skipped_count = 0
+    results = []
+
+    for news_id in news_ids:
+        task_result = await generate_post_for_news(news_id)
+
+        results.append(
+            {
+                "news_id": news_id,
+                "result": task_result,
+            }
+        )
+
+        status = task_result.get("status")
+
+        if status == "generated":
+            generated_count += 1
+        elif status == "failed":
+            failed_count += 1
+        else:
+            skipped_count += 1
+
+    logger.info(
+        "Finished bulk AI generation task: found=%s generated=%s failed=%s skipped=%s",
+        len(news_ids),
+        generated_count,
+        failed_count,
+        skipped_count,
+    )
+
+    return {
+        "status": "completed",
+        "found_count": len(news_ids),
+        "generated_count": generated_count,
+        "failed_count": failed_count,
+        "skipped_count": skipped_count,
+        "results": results,
+    }
+
+
+@celery_app.task
+def generate_posts_for_unprocessed_news_task(limit: int = 5):
+    return asyncio.run(generate_posts_for_unprocessed_news(limit))
+
+
 async def publish_post_to_telegram(post_id: int) -> dict:
     try:
         logger.info("Starting Telegram publishing task: post_id=%s", post_id)
@@ -357,64 +425,6 @@ async def publish_post_to_telegram(post_id: int) -> dict:
 def publish_post_to_telegram_task(post_id: int) -> dict:
     return asyncio.run(publish_post_to_telegram(post_id))
 
-async def generate_posts_for_unprocessed_news(limit: int = 5):
-    logger.info("Starting bulk AI generation task: limit=%s", limit)
-
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(NewsItem.id)
-            .outerjoin(Post, Post.news_id == NewsItem.id)
-            .where(Post.id.is_(None))
-            .order_by(NewsItem.published_at.desc())
-            .limit(limit)
-        )
-
-        news_ids = result.scalars().all()
-
-    generated_count = 0
-    failed_count = 0
-    skipped_count = 0
-    results = []
-
-    for news_id in news_ids:
-        task_result = await generate_post_for_news(news_id)
-        results.append(
-            {
-                "news_id": news_id,
-                "result": task_result,
-            }
-        )
-
-        status = task_result.get("status")
-
-        if status == "generated":
-            generated_count += 1
-        elif status == "failed":
-            failed_count += 1
-        else:
-            skipped_count += 1
-
-    logger.info(
-        "Finished bulk AI generation task: found=%s generated=%s failed=%s skipped=%s",
-        len(news_ids),
-        generated_count,
-        failed_count,
-        skipped_count,
-    )
-
-    return {
-        "status": "completed",
-        "found_count": len(news_ids),
-        "generated_count": generated_count,
-        "failed_count": failed_count,
-        "skipped_count": skipped_count,
-        "results": results,
-    }
-
-
-@celery_app.task
-def generate_posts_for_unprocessed_news_task(limit: int = 5):
-    return asyncio.run(generate_posts_for_unprocessed_news(limit))
 
 async def publish_generated_posts(limit: int = 5):
     logger.info("Starting bulk Telegram publishing task: limit=%s", limit)
@@ -437,6 +447,7 @@ async def publish_generated_posts(limit: int = 5):
 
     for post_id in post_ids:
         task_result = await publish_post_to_telegram(post_id)
+
         results.append(
             {
                 "post_id": post_id,
@@ -475,26 +486,34 @@ async def publish_generated_posts(limit: int = 5):
 def publish_generated_posts_task(limit: int = 5):
     return asyncio.run(publish_generated_posts(limit))
 
-async def run_news_pipeline(generation_limit: int = 5, publishing_limit: int = 5):
+
+async def run_news_pipeline(
+    generation_limit: int = 5,
+    publishing_limit: int = 5,
+    language: str | None = None,
+):
     logger.info(
-        "Starting news pipeline: generation_limit=%s publishing_limit=%s",
+        "Starting news pipeline: generation_limit=%s publishing_limit=%s language=%s",
         generation_limit,
         publishing_limit,
+        language,
     )
 
-    parsing_result = await parse_enabled_sources()
+    parsing_result = await parse_enabled_sources(language)
     generation_result = await generate_posts_for_unprocessed_news(generation_limit)
     publishing_result = await publish_generated_posts(publishing_limit)
 
     logger.info(
-        "Finished news pipeline: parsed_sources=%s generated=%s published=%s",
+        "Finished news pipeline: parsed_sources=%s generated=%s published=%s language=%s",
         parsing_result.get("sources_count"),
         generation_result.get("generated_count"),
         publishing_result.get("published_count"),
+        language,
     )
 
     return {
         "status": "completed",
+        "language": language,
         "parsing": parsing_result,
         "generation": generation_result,
         "publishing": publishing_result,
@@ -502,5 +521,9 @@ async def run_news_pipeline(generation_limit: int = 5, publishing_limit: int = 5
 
 
 @celery_app.task
-def run_news_pipeline_task(generation_limit: int = 5, publishing_limit: int = 5):
-    return asyncio.run(run_news_pipeline(generation_limit, publishing_limit))
+def run_news_pipeline_task(
+    generation_limit: int = 5,
+    publishing_limit: int = 5,
+    language: str | None = None,
+):
+    return asyncio.run(run_news_pipeline(generation_limit, publishing_limit, language))
