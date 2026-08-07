@@ -456,3 +456,33 @@ async def publish_generated_posts(limit: int = 5):
 @celery_app.task
 def publish_generated_posts_task(limit: int = 5):
     return asyncio.run(publish_generated_posts(limit))
+
+async def run_news_pipeline(generation_limit: int = 5, publishing_limit: int = 5):
+    logger.info(
+        "Starting news pipeline: generation_limit=%s publishing_limit=%s",
+        generation_limit,
+        publishing_limit,
+    )
+
+    parsing_result = await parse_enabled_sources()
+    generation_result = await generate_posts_for_unprocessed_news(generation_limit)
+    publishing_result = await publish_generated_posts(publishing_limit)
+
+    logger.info(
+        "Finished news pipeline: parsed_sources=%s generated=%s published=%s",
+        parsing_result.get("sources_count"),
+        generation_result.get("generated_count"),
+        publishing_result.get("published_count"),
+    )
+
+    return {
+        "status": "completed",
+        "parsing": parsing_result,
+        "generation": generation_result,
+        "publishing": publishing_result,
+    }
+
+
+@celery_app.task
+def run_news_pipeline_task(generation_limit: int = 5, publishing_limit: int = 5):
+    return asyncio.run(run_news_pipeline(generation_limit, publishing_limit))
