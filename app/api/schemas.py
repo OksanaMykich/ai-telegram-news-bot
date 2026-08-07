@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SourceBase(BaseModel):
@@ -86,3 +86,12 @@ class GeneratePostRequest(BaseModel):
 class TelegramParseRequest(BaseModel):
     channel_username: str
     limit: int = 10
+
+class ErrorLogRead(BaseModel):
+    id: int
+    message: str
+    source: str | None = None
+    task_name: str | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
