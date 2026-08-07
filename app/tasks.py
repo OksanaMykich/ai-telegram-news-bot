@@ -157,6 +157,7 @@ async def parse_enabled_sources() -> dict:
                     "type": source.type,
                     "name": source.name,
                     "url": source.url,
+                    "language": source.language,
                 }
                 for source in sources
             ]
@@ -195,6 +196,7 @@ async def parse_enabled_sources() -> dict:
                     {
                         "source": source["name"],
                         "type": source["type"],
+                        "language": source["language"],
                         "result": task_result,
                     }
                 )
@@ -214,6 +216,7 @@ async def parse_enabled_sources() -> dict:
                     {
                         "source": source["name"],
                         "type": source["type"],
+                        "language": source["language"],
                         "status": "failed",
                         "error": str(exc),
                     }
@@ -228,8 +231,6 @@ async def parse_enabled_sources() -> dict:
         }
     finally:
         await engine.dispose()
-
-
 @celery_app.task
 def parse_enabled_sources_task() -> dict:
     return asyncio.run(parse_enabled_sources())
