@@ -6,7 +6,7 @@ from app.ai.generator import generate_post_text
 from app.api.schemas import GeneratePostRequest, PostRead
 from app.database import get_db
 from app.models import NewsItem, Post
-from app.tasks import generate_post_for_news_task
+from app.tasks import generate_post_for_news_task, generate_posts_for_unprocessed_news_task
 
 router = APIRouter(prefix="/generate", tags=["generate"])
 
@@ -66,4 +66,14 @@ async def generate_post_task(request_data: GeneratePostRequest):
     return {
         "task_id": task.id,
         "status": "queued",
+    }
+
+@router.post("/task/bulk")
+async def generate_posts_for_unprocessed_news(limit: int = 5):
+    task = generate_posts_for_unprocessed_news_task.delay(limit)
+
+    return {
+        "task_id": task.id,
+        "status": "queued",
+        "limit": limit,
     }
