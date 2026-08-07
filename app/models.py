@@ -14,6 +14,7 @@ class Source(Base):
     name: Mapped[str] = mapped_column(String(255))
     url: Mapped[str] = mapped_column(String(500))
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    language: Mapped[str] = mapped_column(String(10), default="en")
 
 class Keyword(Base):
     __tablename__ = "keywords"
