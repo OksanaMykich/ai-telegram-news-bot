@@ -8,6 +8,7 @@ class SourceBase(BaseModel):
     name: str
     url: str
     enabled: bool = True
+    language: str = "en"
 
 
 class SourceCreate(SourceBase):
