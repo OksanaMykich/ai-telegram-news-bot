@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.ai.generator import generate_post_text
 from app.database import AsyncSessionLocal, engine
-from app.models import Keyword, NewsItem, Post
+from app.models import Keyword, NewsItem, Post, Source
 from app.news_parser.sites import parse_rss_feed
 from app.news_parser.telegram import parse_telegram_channel
 from app.telegram.publisher import send_telegram_message
@@ -141,6 +141,81 @@ async def parse_telegram_source(channel_username: str, limit: int = 10) -> dict:
 @celery_app.task
 def parse_telegram_source_task(channel_username: str, limit: int = 10) -> dict:
     return asyncio.run(parse_telegram_source(channel_username, limit))
+
+
+async def parse_enabled_sources() -> dict:
+    try:
+        logger.info("Starting enabled sources parsing task")
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Source).where(Source.enabled.is_(True)))
+            sources = result.scalars().all()
+
+            source_configs = [
+                {
+                    "type": source.type,
+                    "name": source.name,
+                    "url": source.url,
+                }
+                for source in sources
+            ]
+
+        results = []
+
+        for source in source_configs:
+            source_type = source["type"].lower()
+
+            try:
+                if source_type == "site":
+                    task_result = await parse_rss_source(
+                        source_name=source["name"],
+                        feed_url=source["url"],
+                    )
+                elif source_type in {"tg", "telegram"}:
+                    task_result = await parse_telegram_source(
+                        channel_username=source["url"],
+                        limit=10,
+                    )
+                else:
+                    task_result = {
+                        "status": "skipped",
+                        "error": f"Unsupported source type: {source['type']}",
+                    }
+
+                results.append(
+                    {
+                        "source": source["name"],
+                        "type": source["type"],
+                        "result": task_result,
+                    }
+                )
+            except Exception as exc:
+                logger.exception("Failed to parse source: %s", source["name"])
+                results.append(
+                    {
+                        "source": source["name"],
+                        "type": source["type"],
+                        "result": {
+                            "status": "failed",
+                            "error": str(exc),
+                        },
+                    }
+                )
+
+        logger.info("Finished enabled sources parsing task: sources=%s", len(results))
+
+        return {
+            "status": "completed",
+            "sources_count": len(results),
+            "results": results,
+        }
+    finally:
+        await engine.dispose()
+
+
+@celery_app.task
+def parse_enabled_sources_task() -> dict:
+    return asyncio.run(parse_enabled_sources())
 
 
 async def generate_post_for_news(news_id: int) -> dict:
