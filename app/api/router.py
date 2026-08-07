@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.endpoints import error_logs, generate, keywords, news, pipeline, posts, sources
+from app.api.endpoints import error_logs, generate, keywords, news, pipeline, posts, sources, tasks
 
 api_router = APIRouter(prefix="/api")
 
@@ -11,3 +11,4 @@ api_router.include_router(posts.router)
 api_router.include_router(generate.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(error_logs.router)
+api_router.include_router(tasks.router)
