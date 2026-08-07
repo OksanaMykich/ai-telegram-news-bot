@@ -10,9 +10,13 @@ FastAPI service for collecting news from RSS feeds and public Telegram channels,
 - CRUD API for keywords
 - News item history API
 - Generated post history API
+- Error logs API
+- Celery task monitoring API
 - RSS news parsing
 - Public Telegram channel parsing with Telethon
 - Keyword-based news filtering
+- Source-based filtering through enabled sources
+- Source language filtering
 - Duplicate protection for news and posts
 - Manual AI post generation with OpenAI API
 - OpenAI error handling
@@ -47,12 +51,14 @@ app/
 │   └── openai_client.py
 ├── api/
 │   ├── endpoints/
+│   │   ├── error_logs.py
 │   │   ├── generate.py
 │   │   ├── keywords.py
 │   │   ├── news.py
 │   │   ├── pipeline.py
 │   │   ├── posts.py
-│   │   └── sources.py
+│   │   ├── sources.py
+│   │   └── tasks.py
 │   ├── router.py
 │   └── schemas.py
 ├── news_parser/
@@ -62,6 +68,7 @@ app/
 │   └── publisher.py
 ├── config.py
 ├── database.py
+├── error_logger.py
 ├── logging_config.py
 ├── main.py
 ├── models.py
@@ -172,6 +179,8 @@ Celery Beat runs the full news pipeline every 30 minutes:
 parse enabled sources -> generate AI posts -> publish generated posts
 ```
 
+On Windows, Celery worker should be started with `--pool=solo`.
+
 ## API Endpoints
 
 ```text
@@ -204,9 +213,13 @@ POST   /api/posts/{post_id}/publish-task
 POST   /api/posts/publish-task/bulk
 
 POST   /api/pipeline/run
+
+GET    /api/tasks/{task_id}
+
+GET    /api/error-logs/
 ```
 
-## Example Source
+## Example Sources
 
 RSS source:
 
@@ -215,7 +228,8 @@ RSS source:
   "type": "site",
   "name": "BBC News RSS",
   "url": "https://feeds.bbci.co.uk/news/rss.xml",
-  "enabled": true
+  "enabled": true,
+  "language": "en"
 }
 ```
 
@@ -226,9 +240,29 @@ Telegram source:
   "type": "tg",
   "name": "Durov",
   "url": "durov",
-  "enabled": true
+  "enabled": true,
+  "language": "en"
 }
 ```
+
+## Pipeline
+
+Run the full pipeline manually through Swagger:
+
+```text
+POST /api/pipeline/run
+```
+
+Parameters:
+
+```text
+generation_limit: maximum number of news items for AI generation
+publishing_limit: maximum number of generated posts to publish
+language: optional source language filter, for example en or uk
+```
+
+If `language` is empty, the pipeline uses all enabled sources.
+
 
 ## Notes
 
@@ -238,5 +272,5 @@ Telegram source:
 - Celery Beat uses only sources where `enabled = true`.
 - RSS sources must use a direct RSS feed URL.
 - Telegram sources use public channel usernames.
-- On Windows, Celery worker should be started with `--pool=solo`.
 - `TELEGRAM_TARGET_CHANNEL` must be a Telegram channel where the account has admin permissions.
+- If OpenAI credits are missing, generation tasks return a controlled failed status instead of crashing the application.
