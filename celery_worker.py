@@ -12,9 +12,10 @@ celery_app = Celery(
 celery_app.autodiscover_tasks(["app"])
 
 celery_app.conf.beat_schedule = {
-    "parse-enabled-sources-every-30-minutes": {
-        "task": "app.tasks.parse_enabled_sources_task",
+    "run-news-pipeline-every-30-minutes": {
+        "task": "app.tasks.run_news_pipeline_task",
         "schedule": 30 * 60,
+        "args": (5, 5),
     },
 }
 
