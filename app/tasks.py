@@ -13,6 +13,7 @@ from app.news_parser.telegram import parse_telegram_channel
 from app.telegram.publisher import send_telegram_message
 from app.utils import is_news_relevant
 from celery_worker import celery_app
+from app.error_logger import save_error_log
 
 
 logger = logging.getLogger(__name__)
@@ -177,9 +178,17 @@ async def parse_enabled_sources() -> dict:
                         limit=10,
                     )
                 else:
+                    error_message = f"Unsupported source type: {source['type']}"
+
+                    await save_error_log(
+                        message=error_message,
+                        source=source["name"],
+                        task_name="parse_enabled_sources_task",
+                    )
+
                     task_result = {
                         "status": "skipped",
-                        "error": f"Unsupported source type: {source['type']}",
+                        "error": error_message,
                     }
 
                 results.append(
@@ -189,16 +198,24 @@ async def parse_enabled_sources() -> dict:
                         "result": task_result,
                     }
                 )
+
             except Exception as exc:
-                logger.exception("Failed to parse source: %s", source["name"])
+                logger.exception(
+                    "Failed to parse source: name=%s type=%s",
+                    source["name"],
+                    source["type"],
+                )
+                await save_error_log(
+                    message=str(exc),
+                    source=source["name"],
+                    task_name="parse_enabled_sources_task",
+                )
                 results.append(
                     {
                         "source": source["name"],
                         "type": source["type"],
-                        "result": {
-                            "status": "failed",
-                            "error": str(exc),
-                        },
+                        "status": "failed",
+                        "error": str(exc),
                     }
                 )
 
