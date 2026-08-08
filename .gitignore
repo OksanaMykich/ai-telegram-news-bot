@@ -8,3 +8,5 @@ __pycache__/
 celerybeat-schedule*
 *.session
 *.session-journal
+.env.docker
+sessions/

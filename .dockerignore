@@ -9,3 +9,6 @@ celerybeat-schedule*
 .pytest_cache
 output
 tmp
+.env.docker
+*.session-journal
+sessions
