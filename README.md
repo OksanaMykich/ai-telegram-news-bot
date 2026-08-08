@@ -1,6 +1,6 @@
 # AI Telegram News Bot
 
-FastAPI service for collecting news from RSS feeds and public Telegram channels, filtering relevant items, generating AI-based Telegram posts, and publishing them to a Telegram channel on schedule.
+FastAPI service for collecting news from RSS feeds and public Telegram channels, filtering relevant items, generating AI-based Telegram posts, and publishing them to a Telegram channel.
 
 ## Features
 
@@ -14,17 +14,16 @@ FastAPI service for collecting news from RSS feeds and public Telegram channels,
 - Celery task monitoring API
 - RSS news parsing
 - Public Telegram channel parsing with Telethon
-- Keyword-based news filtering
-- Source-based filtering through enabled sources
+- Keyword-based filtering
+- Source-based filtering with enabled sources
 - Source language filtering
 - Duplicate protection for news and posts
 - Manual AI post generation with OpenAI API
-- OpenAI error handling
+- OpenAI API error handling
 - Telegram publishing with Telethon
 - Redis and Celery background tasks
 - Celery Beat scheduled full news pipeline
-- Full pipeline: parse enabled sources -> generate AI posts -> publish generated posts
-- Logging for API actions and Celery tasks
+- Docker Compose setup
 
 ## Tech Stack
 
@@ -78,10 +77,13 @@ app/
 
 ## Environment Variables
 
-Create a `.env` file based on `.env.example`.
+Create a local `.env` file based on `.env.example`.
+
+Example for local development:
 
 ```env
 APP_NAME=AI Telegram News Bot
+
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/aibot
 REDIS_URL=redis://localhost:6379/0
 
@@ -94,7 +96,9 @@ TELEGRAM_SESSION_NAME=aibot_session
 TELEGRAM_TARGET_CHANNEL=@your_channel_username
 ```
 
-## Installation
+The `.env` file contains private keys and must not be committed to Git.
+
+## Local Installation
 
 Create and activate a virtual environment:
 
@@ -109,7 +113,7 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-## Database Setup
+## Local Database Setup
 
 Create a PostgreSQL database named:
 
@@ -123,7 +127,7 @@ Run migrations:
 alembic upgrade head
 ```
 
-## Redis Setup
+## Local Redis Setup
 
 Start Docker Desktop first.
 
@@ -145,7 +149,7 @@ Check that Redis is running:
 docker ps
 ```
 
-## Running the Application
+## Running Locally
 
 Start FastAPI:
 
@@ -159,27 +163,100 @@ Open Swagger documentation:
 http://127.0.0.1:8000/docs
 ```
 
-## Running Background Services
-
-Start Celery worker:
+Start Celery worker in a separate terminal:
 
 ```powershell
 celery -A celery_worker.celery_app worker --loglevel=info --pool=solo
 ```
 
-Start Celery Beat:
+Start Celery Beat in another terminal:
 
 ```powershell
 celery -A celery_worker.celery_app beat --loglevel=info
 ```
 
-Celery Beat runs the full news pipeline every 30 minutes:
+On Windows, Celery worker should be started with `--pool=solo`.
 
-```text
-parse enabled sources -> generate AI posts -> publish generated posts
+## Docker Compose Setup
+
+The project can also be started with Docker Compose.
+
+Docker Compose runs:
+
+- FastAPI application
+- PostgreSQL database
+- Redis
+- Celery worker
+- Celery Beat
+
+Create a `.env.docker` file before starting Docker Compose:
+
+```env
+APP_NAME=AI Telegram News Bot
+
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/aibot
+REDIS_URL=redis://redis:6379/0
+
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4o-mini
+
+TELEGRAM_API_ID=your_telegram_api_id_here
+TELEGRAM_API_HASH=your_telegram_api_hash_here
+TELEGRAM_SESSION_NAME=sessions/aibot_session
+TELEGRAM_TARGET_CHANNEL=@your_channel_username
 ```
 
-On Windows, Celery worker should be started with `--pool=solo`.
+Start all Docker services:
+
+```powershell
+docker compose up --build
+```
+
+On the first Docker start, run database migrations in a second terminal:
+
+```powershell
+docker compose exec api alembic upgrade head
+```
+
+Open Swagger documentation:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Stop Docker services:
+
+```powershell
+docker compose down
+```
+
+Remove Docker services and Docker database volume:
+
+```powershell
+docker compose down -v
+```
+
+Docker uses a separate PostgreSQL database from the local PostgreSQL installation.
+
+Docker PostgreSQL is available on the host machine at:
+
+```text
+localhost:5433
+```
+
+Inside Docker Compose, services use internal host names:
+
+```text
+postgres
+redis
+```
+
+That is why `.env.docker` uses:
+
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/aibot
+REDIS_URL=redis://redis:6379/0
+```
 
 ## API Endpoints
 
@@ -247,7 +324,13 @@ Telegram source:
 
 ## Pipeline
 
-Run the full pipeline manually through Swagger:
+The full background pipeline does three steps:
+
+```text
+parse enabled sources -> generate AI posts -> publish generated posts
+```
+
+Run the pipeline manually through Swagger:
 
 ```text
 POST /api/pipeline/run
@@ -263,14 +346,19 @@ language: optional source language filter, for example en or uk
 
 If `language` is empty, the pipeline uses all enabled sources.
 
+Celery Beat runs the full pipeline every 30 minutes.
+
 
 ## Notes
 
 - `.env` must not be committed to Git.
+- `.env.docker` must not be committed to Git.
 - Telethon creates `.session` files. They must not be committed.
+- Docker Compose uses a separate PostgreSQL database from the local PostgreSQL installation.
+- After the first Docker Compose start, run `docker compose exec api alembic upgrade head`.
 - OpenAI generation requires a valid API key and active API credits.
+- If OpenAI credits are missing, generation tasks return a controlled failed status instead of crashing the application.
 - Celery Beat uses only sources where `enabled = true`.
 - RSS sources must use a direct RSS feed URL.
 - Telegram sources use public channel usernames.
 - `TELEGRAM_TARGET_CHANNEL` must be a Telegram channel where the account has admin permissions.
-- If OpenAI credits are missing, generation tasks return a controlled failed status instead of crashing the application.
