@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+.env
+*.session
+celerybeat-schedule*
+.git
+.idea
+.pytest_cache
+output
+tmp
