@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,7 +44,7 @@ async def publish_post(post_id: int, db: AsyncSession = Depends(get_db)):
     await send_telegram_message(post.generated_text)
 
     post.status = "published"
-    post.published_at = datetime.utcnow()
+    post.published_at = datetime.now(UTC).replace(tzinfo=None)
 
     await db.commit()
     await db.refresh(post)

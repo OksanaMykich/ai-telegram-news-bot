@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 import feedparser
 
@@ -9,7 +9,7 @@ def parse_rss_feed(source_name: str, feed_url: str) -> list[dict]:
     news_items = []
 
     for entry in feed.entries:
-        published_at = datetime.utcnow()
+        published_at = datetime.now(UTC).replace(tzinfo=None)
 
         if hasattr(entry, "published_parsed") and entry.published_parsed:
             published_at = datetime(*entry.published_parsed[:6])
