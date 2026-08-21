@@ -88,7 +88,7 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/aibot
 REDIS_URL=redis://localhost:6379/0
 
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-5-nano
 
 TELEGRAM_API_ID=your_telegram_api_id_here
 TELEGRAM_API_HASH=your_telegram_api_hash_here
@@ -198,7 +198,7 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/aibot
 REDIS_URL=redis://redis:6379/0
 
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-5-nano
 
 TELEGRAM_API_ID=your_telegram_api_id_here
 TELEGRAM_API_HASH=your_telegram_api_hash_here
